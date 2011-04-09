@@ -1,5 +1,5 @@
 #!/bin/bash
-cd /home/jamie/sources/deluge/deluge/scripts/autoremove
+cd /home/jamie/work/autoremove
 mkdir temp
 export PYTHONPATH=./temp
 python setup.py build develop --install-dir ./temp

@@ -43,16 +43,35 @@ import deluge.component as component
 import deluge.configmanager
 from deluge.core.rpcserver import export
 
+from twisted.internet import reactor
+
 DEFAULT_PREFS = {
-    "test":"NiNiNi"
+    'max_seeds' : -1,
+    'filter' : 'func_ratio'
 }
 
+def _get_ratio((i, t)): 
+    return t.get_ratio()
+
+def _date_added((i, t)): 
+    return -t.time_added 
+
 class Core(CorePluginBase):
+
+    filter_funcs = { 
+        'func_ratio' : _get_ratio, 
+        'func_added' : lambda (i, t): -t.time_added 
+    }
+
     def enable(self):
+        log.debug ("AutoRemove: Enabled")
         self.config = deluge.configmanager.ConfigManager("autoremove.conf", DEFAULT_PREFS)
+        self.torrent_states = deluge.configmanager.ConfigManager("autoremovestates.conf", {})
+        component.get("EventManager").register_event_handler("TorrentFinishedEvent", self.do_remove)
+        self.do_remove() 
 
     def disable(self):
-        pass
+        component.get("EventManager").deregister_event_handler("TorrentFinishedEvent", self.do_remove)
 
     def update(self):
         pass
@@ -68,3 +87,70 @@ class Core(CorePluginBase):
     def get_config(self):
         """Returns the config dictionary"""
         return self.config.config
+
+    @export 
+    def get_remove_rules(self): 
+        return {
+            'func_ratio' : 'Ratio',  
+            'func_added' : 'Date Added'
+        }
+
+    @export
+    def get_ignore(self, torrent_ids): 
+        if not hasattr(torrent_ids, '__iter__'): 
+            torrent_ids = [torrent_ids] 
+
+        return [ self.torrent_states.get(t, False) for t in torrent_ids ] 
+
+    @export 
+    def set_ignore(self, torrent_ids, ignore = True): 
+        log.debug ("AutoRemove: Setting torrents %s to ignore=%s" % (torrent_ids, ignore))
+
+        if not hasattr(torrent_ids, '__iter__'): 
+            torrent_ids = [torrent_ids] 
+
+        for t in torrent_ids: 
+            self.torrent_states[t] = ignore 
+
+    # we don't use args or kwargs it just allows callbacks to happen cleanly
+    def do_remove(self, *args, **kwargs): 
+        log.debug("AutoRemove: do_remove")
+
+        max_seeds = self.config['max_seeds'] 
+
+        # Negative max means unlimited seeds are allowed, so don't do anything
+        if max_seeds < 0: 
+            return 
+
+        torrentmanager = component.get("TorrentManager")
+        torrent_ids = torrentmanager.get_torrent_list()
+
+        # If there are less torrents present than we allow then there can be nothing to do 
+        if len(torrent_ids) < max_seeds: 
+            return 
+
+        # relevant torrents to us exist and are finished
+        torrents = filter (lambda (i, t): t and t.is_finished, [ (i, torrentmanager.torrents.get(i, None)) for i in torrent_ids ])
+
+        # now that we have trimmed active torrents check again to make sure we still need to proceed
+        if len(torrents) < max_seeds: 
+            return 
+
+        # sort it according to our chosen method 
+        torrents.sort(key = Core.filter_funcs.get(self.config['filter'], _get_ratio), reverse = False)
+
+        changed = False
+        # remove these torrents
+        for i, t in torrents[max_seeds:]: 
+            #torrentmanager.remove(i, remove_data = False)
+            print "AutoRemove: Remove torrent", i, t.get_status(['name'])['name'], Core.filter_funcs[self.config['filter']]((i, t))
+
+            try: 
+                #del self.torrent_states[i] 
+                changed = True
+            except KeyError: 
+                pass
+
+        if changed: 
+            self.torrent_states.save()
+         

@@ -48,28 +48,60 @@ import deluge.common
 from common import get_resource
 
 class GtkUI(GtkPluginBase):
+    
     def enable(self):
         self.glade = gtk.glade.XML(get_resource("config.glade"))
-
         component.get("Preferences").add_page("AutoRemove", self.glade.get_widget("prefs_box"))
         component.get("PluginManager").register_hook("on_apply_prefs", self.on_apply_prefs)
         component.get("PluginManager").register_hook("on_show_prefs", self.on_show_prefs)
+
+        self.rules = gtk.ListStore(str, str)
+        client.autoremove.get_remove_rules().addCallback(self.cb_get_rules)
+
+        cell = gtk.CellRendererText()
+        
+        cbo_remove = self.glade.get_widget("cbo_remove")
+        cbo_remove.pack_start(cell, True)
+        cbo_remove.add_attribute(cell, 'text', 1)
+        cbo_remove.set_model(self.rules)
 
     def disable(self):
         component.get("Preferences").remove_page("AutoRemove")
         component.get("PluginManager").deregister_hook("on_apply_prefs", self.on_apply_prefs)
         component.get("PluginManager").deregister_hook("on_show_prefs", self.on_show_prefs)
 
+        del self.rules
+
     def on_apply_prefs(self):
         log.debug("applying prefs for AutoRemove")
+
+        c = self.glade.get_widget("cbo_remove")
+
         config = {
-            "test":self.glade.get_widget("txt_test").get_text()
+            "max_seeds" : self.glade.get_widget("spn_seeds").get_value_as_int(),
+            'filter' : c.get_model()[c.get_active_iter()][0] 
         }
+
         client.autoremove.set_config(config)
 
     def on_show_prefs(self):
         client.autoremove.get_config().addCallback(self.cb_get_config)
 
+    def cb_get_rules(self, rules): 
+        self.rules.clear() 
+
+        for k, v in rules.iteritems(): 
+            self.rules.append((k,v))
+
     def cb_get_config(self, config):
-        "callback for on show_prefs"
-        self.glade.get_widget("txt_test").set_text(config["test"])
+        self.glade.get_widget("spn_seeds").set_value(config["max_seeds"])
+
+        selected = config['filter']
+
+        for i, row in enumerate(self.rules): 
+            if row[0] == selected: 
+                self.glade.get_widget("cbo_remove").set_active(i) 
+                break
+        else:
+            self.glade.get_widget("cbo_remove").set_active(0)
+
