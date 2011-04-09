@@ -67,13 +67,24 @@ class Core(CorePluginBase):
         log.debug ("AutoRemove: Enabled")
         self.config = deluge.configmanager.ConfigManager("autoremove.conf", DEFAULT_PREFS)
         self.torrent_states = deluge.configmanager.ConfigManager("autoremovestates.conf", {})
-        component.get("EventManager").register_event_handler("TorrentFinishedEvent", self.do_remove)
-        self.do_remove() 
+
+        eventmanager = component.get("EventManager")
+        eventmanager.register_event_handler("TorrentFinishedEvent", self.do_remove)
+
+        # it appears that if the plugin is enabled on boot then it is called before the 
+        # torrents are properly loaded and so do_remove receives an empty list. So we must 
+        # listen to SessionStarted for when deluge boots but we still have apply_now so that 
+        # if the plugin is enabled mid-program do_remove is still run
+        eventmanager.register_event_handler("SessionStartedEvent", self.do_remove)       
+        self.config.register_set_function('max_seeds', self.do_remove, apply_now = True)
 
     def disable(self):
-        component.get("EventManager").deregister_event_handler("TorrentFinishedEvent", self.do_remove)
+        eventmanager = component.get("EventManager")
+        eventmanager.deregister_event_handler("TorrentFinishedEvent", self.do_remove)
+        eventmanager.deregister_event_handler("SessionStartedEvent", self.do_remove)
 
     def update(self):
+        # why does update only seem to get called when the plugin is enabled in this session ??
         pass
 
     @export
@@ -126,7 +137,7 @@ class Core(CorePluginBase):
         torrent_ids = torrentmanager.get_torrent_list()
 
         # If there are less torrents present than we allow then there can be nothing to do 
-        if len(torrent_ids) < max_seeds: 
+        if len(torrent_ids) <= max_seeds: 
             return 
 
         # relevant torrents to us exist and are finished
