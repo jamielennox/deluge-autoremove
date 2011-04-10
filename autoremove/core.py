@@ -47,7 +47,8 @@ from twisted.internet import reactor
 
 DEFAULT_PREFS = {
     'max_seeds' : -1,
-    'filter' : 'func_ratio'
+    'filter' : 'func_ratio',
+    'count_exempt' : False
 }
 
 def _get_ratio((i, t)): 
@@ -76,7 +77,6 @@ class Core(CorePluginBase):
         # listen to SessionStarted for when deluge boots but we still have apply_now so that 
         # if the plugin is enabled mid-program do_remove is still run
         eventmanager.register_event_handler("SessionStartedEvent", self.do_remove)       
-        self.config.register_set_function('max_seeds', self.do_remove, apply_now = True)
 
     def disable(self):
         eventmanager = component.get("EventManager")
@@ -93,6 +93,7 @@ class Core(CorePluginBase):
         for key in config.keys():
             self.config[key] = config[key]
         self.config.save()
+        self.do_remove()
 
     @export
     def get_config(self):
@@ -130,6 +131,7 @@ class Core(CorePluginBase):
         log.debug("AutoRemove: do_remove")
 
         max_seeds = self.config['max_seeds'] 
+        count_exempt = self.config['count_exempt']
 
         # Negative max means unlimited seeds are allowed, so don't do anything
         if max_seeds < 0: 
@@ -141,15 +143,38 @@ class Core(CorePluginBase):
         # If there are less torrents present than we allow then there can be nothing to do 
         if len(torrent_ids) <= max_seeds: 
             return 
+        
+        torrents = []
+        ignored_torrents = []
 
-        # relevant torrents to us exist and are finished and not ignored 
-        torrents = filter (lambda (i, t): t and t.is_finished and not self.torrent_states.config.get(i, False),
-                [ (i, torrentmanager.torrents.get(i, None)) for i in torrent_ids ])
+        # relevant torrents to us exist and are finished 
+        for i in torrent_ids: 
+            t = torrentmanager.torrents.get(i, None)
+
+            try:
+                finished = t.is_finished
+            except: 
+                continue
+            else: 
+                if not finished: 
+                    continue
+
+            try: 
+                ignored = self.torrent_states[i]
+            except KeyError:
+                ignored = False
+
+            (ignored_torrents if ignored else torrents).append((i, t))
 
         # now that we have trimmed active torrents check again to make sure we still need to proceed
-        if len(torrents) < max_seeds: 
+        if len(torrents) + (len(ignored_torrents) if count_exempt else 0) <= max_seeds: 
             return 
 
+        # if we are counting ignored torrents towards our maximum then these have to come off the top of our allowance
+        if count_exempt: 
+            max_seeds -= len(ignored_torrents)
+            if max_seeds < 0: max_seeds = 0 
+        
         # sort it according to our chosen method 
         torrents.sort(key = filter_funcs.get(self.config['filter'], _get_ratio), reverse = False)
 

@@ -77,7 +77,7 @@ class GtkUI(GtkPluginBase):
         def on_menu_toggled(menu):
             client.autoremove.set_ignore(component.get("TorrentView").get_selected_torrents(), menu.get_active())
 
-        self.menu = gtk.CheckMenuItem(_("Ignore AutoRemove"))
+        self.menu = gtk.CheckMenuItem(_("AutoRemove Exempt"))
         self.menu.show()
 
         toggled = self.menu.connect('toggled', on_menu_toggled)
@@ -106,7 +106,8 @@ class GtkUI(GtkPluginBase):
 
         config = {
             "max_seeds" : self.glade.get_widget("spn_seeds").get_value_as_int(),
-            'filter' : self.rules[c.get_active_iter()][0] 
+            'filter' : self.rules[c.get_active_iter()][0],
+            'count_exempt' : self.glade.get_widget('chk_count').get_active()
         }
 
         client.autoremove.set_config(config)
@@ -122,6 +123,7 @@ class GtkUI(GtkPluginBase):
 
     def cb_get_config(self, config):
         self.glade.get_widget("spn_seeds").set_value(config["max_seeds"])
+        self.glade.get_widget("chk_count").set_active(config['count_exempt'])
 
         selected = config['filter']
 
