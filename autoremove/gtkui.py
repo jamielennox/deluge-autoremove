@@ -86,6 +86,8 @@ class GtkUI(GtkPluginBase):
         self.show_sig = torrentmenu.connect('show', on_menu_show, (self.menu, toggled))
         torrentmenu.append(self.menu)
 
+        self.on_show_prefs()
+
     def disable(self):
         component.get("Preferences").remove_page("AutoRemove")
         component.get("PluginManager").deregister_hook("on_apply_prefs", self.on_apply_prefs)
@@ -106,7 +108,7 @@ class GtkUI(GtkPluginBase):
 
         config = {
             "max_seeds" : self.glade.get_widget("spn_seeds").get_value_as_int(),
-            'filter' : self.rules[c.get_active_iter()][0],
+            'filter' : c.get_model()[c.get_active_iter()][0],
             'count_exempt' : self.glade.get_widget('chk_count').get_active()
         }
 
