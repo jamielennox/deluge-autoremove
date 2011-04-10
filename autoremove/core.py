@@ -62,7 +62,7 @@ filter_funcs = {
     'func_added' : lambda (i, t): -t.time_added 
 }
 
-live = False 
+live = True
 
 class Core(CorePluginBase):
 
