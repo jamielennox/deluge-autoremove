@@ -62,6 +62,8 @@ filter_funcs = {
     'func_added' : lambda (i, t): -t.time_added 
 }
 
+live = False 
+
 class Core(CorePluginBase):
 
     def enable(self):
@@ -181,14 +183,17 @@ class Core(CorePluginBase):
         changed = False
         # remove these torrents
         for i, t in torrents[max_seeds:]: 
-            #torrentmanager.remove(i, remove_data = False)
-            print "AutoRemove: Remove torrent", i, t.get_status(['name'])['name'], filter_funcs[self.config['filter']]((i, t))
+            if live: 
+                torrentmanager.remove(i, remove_data = False)
 
-            try: 
-                #del self.torrent_states[i] 
-                changed = True
-            except KeyError: 
-                pass
+                try: 
+                    del self.torrent_states[i] 
+                    changed = True
+                except KeyError: 
+                    pass
+            else:
+                print "AutoRemove: Remove torrent", i, t.get_status(['name'])['name'], filter_funcs[self.config['filter']]((i, t))
+
 
         if changed: 
             self.torrent_states.save()
