@@ -56,12 +56,12 @@ def _get_ratio((i, t)):
 def _date_added((i, t)): 
     return -t.time_added 
 
-class Core(CorePluginBase):
+filter_funcs = { 
+    'func_ratio' : _get_ratio, 
+    'func_added' : lambda (i, t): -t.time_added 
+}
 
-    filter_funcs = { 
-        'func_ratio' : _get_ratio, 
-        'func_added' : lambda (i, t): -t.time_added 
-    }
+class Core(CorePluginBase):
 
     def enable(self):
         log.debug ("AutoRemove: Enabled")
@@ -151,13 +151,13 @@ class Core(CorePluginBase):
             return 
 
         # sort it according to our chosen method 
-        torrents.sort(key = Core.filter_funcs.get(self.config['filter'], _get_ratio), reverse = False)
+        torrents.sort(key = filter_funcs.get(self.config['filter'], _get_ratio), reverse = False)
 
         changed = False
         # remove these torrents
         for i, t in torrents[max_seeds:]: 
             #torrentmanager.remove(i, remove_data = False)
-            print "AutoRemove: Remove torrent", i, t.get_status(['name'])['name'], Core.filter_funcs[self.config['filter']]((i, t))
+            print "AutoRemove: Remove torrent", i, t.get_status(['name'])['name'], filter_funcs[self.config['filter']]((i, t))
 
             try: 
                 #del self.torrent_states[i] 
