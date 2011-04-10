@@ -111,7 +111,7 @@ class Core(CorePluginBase):
         if not hasattr(torrent_ids, '__iter__'): 
             torrent_ids = [torrent_ids] 
 
-        return [ self.torrent_states.get(t, False) for t in torrent_ids ] 
+        return [ self.torrent_states.config.get(t, False) for t in torrent_ids ] 
 
     @export 
     def set_ignore(self, torrent_ids, ignore = True): 
@@ -122,6 +122,8 @@ class Core(CorePluginBase):
 
         for t in torrent_ids: 
             self.torrent_states[t] = ignore 
+
+        self.torrent_states.save()
 
     # we don't use args or kwargs it just allows callbacks to happen cleanly
     def do_remove(self, *args, **kwargs): 
@@ -140,8 +142,9 @@ class Core(CorePluginBase):
         if len(torrent_ids) <= max_seeds: 
             return 
 
-        # relevant torrents to us exist and are finished
-        torrents = filter (lambda (i, t): t and t.is_finished, [ (i, torrentmanager.torrents.get(i, None)) for i in torrent_ids ])
+        # relevant torrents to us exist and are finished and not ignored 
+        torrents = filter (lambda (i, t): t and t.is_finished and not self.torrent_states.config.get(i, False),
+                [ (i, torrentmanager.torrents.get(i, None)) for i in torrent_ids ])
 
         # now that we have trimmed active torrents check again to make sure we still need to proceed
         if len(torrents) < max_seeds: 

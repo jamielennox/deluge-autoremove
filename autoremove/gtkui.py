@@ -65,12 +65,39 @@ class GtkUI(GtkPluginBase):
         cbo_remove.add_attribute(cell, 'text', 1)
         cbo_remove.set_model(self.rules)
 
+        def on_menu_show(menu, (menu_item, toggled)): 
+            def set_ignored(ignored): 
+                # set_active will raise the 'toggled'/'activated' signals so block it to not reset the value
+                menu_item.handler_block (toggled)
+                menu_item.set_active(False not in ignored) 
+                menu_item.handler_unblock (toggled)
+
+            client.autoremove.get_ignore([t for t in component.get("TorrentView").get_selected_torrents() ]).addCallback(set_ignored)    
+
+        def on_menu_toggled(menu):
+            client.autoremove.set_ignore(component.get("TorrentView").get_selected_torrents(), menu.get_active())
+
+        self.menu = gtk.CheckMenuItem(_("Ignore AutoRemove"))
+        self.menu.show()
+
+        toggled = self.menu.connect('toggled', on_menu_toggled)
+
+        torrentmenu = component.get("MenuBar").torrentmenu
+        self.show_sig = torrentmenu.connect('show', on_menu_show, (self.menu, toggled))
+        torrentmenu.append(self.menu)
+
     def disable(self):
         component.get("Preferences").remove_page("AutoRemove")
         component.get("PluginManager").deregister_hook("on_apply_prefs", self.on_apply_prefs)
         component.get("PluginManager").deregister_hook("on_show_prefs", self.on_show_prefs)
 
+        torrentmenu = component.get("MenuBar").torrentmenu
+        torrentmenu.remove(self.menu)
+        torrentmenu.disconnect(self.show_sig) 
+
         del self.rules
+        del self.menu 
+        del self.show_sig 
 
     def on_apply_prefs(self):
         log.debug("applying prefs for AutoRemove")
@@ -79,7 +106,7 @@ class GtkUI(GtkPluginBase):
 
         config = {
             "max_seeds" : self.glade.get_widget("spn_seeds").get_value_as_int(),
-            'filter' : c.get_model()[c.get_active_iter()][0] 
+            'filter' : self.rules[c.get_active_iter()][0] 
         }
 
         client.autoremove.set_config(config)
